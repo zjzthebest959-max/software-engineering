@@ -74,7 +74,10 @@ def role_required(role):
 
 def create_app(test_config=None):
     app = Flask(__name__)
-    app.config.from_mapping(SECRET_KEY="campus-activity-demo", DATABASE=os.path.join(app.instance_path, "campus.db"))
+    app.config.from_mapping(
+        SECRET_KEY=os.environ.get("SECRET_KEY", "campus-activity-demo"),
+        DATABASE=os.path.join(app.instance_path, "campus.db"),
+    )
     if test_config:
         app.config.update(test_config)
     os.makedirs(app.instance_path, exist_ok=True)
