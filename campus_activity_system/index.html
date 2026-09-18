@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>校园活动管理系统 V1.0</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="site-header"><div class="shell header-content"><div><h1>校园活动管理系统</h1><p>V1.0 · 最小原型</p></div><div class="user-bar"><span id="current-user">未登录</span><button id="logout-button" class="button outline" hidden>退出登录</button></div></div></header>
+  <main class="shell">
+    <p id="notice" class="notice" hidden aria-live="polite"></p>
+    <section id="auth-section" class="panel auth-panel"><h2>注册或登录</h2><p class="hint">演示账号：教师 <code>teacher / 123456</code>，学生 <code>student / 123456</code>。</p><form id="auth-form" class="form-grid"><label>用户名<input name="username" maxlength="20" required></label><label>密码<input name="password" type="password" maxlength="30" required></label><label>身份<select name="role"><option value="student">学生</option><option value="teacher">教师</option></select></label><div class="form-actions"><button class="button primary" type="submit" value="login">登录</button><button class="button secondary" type="submit" value="register">注册</button></div></form></section>
+    <section class="panel"><div class="section-title"><h2>可报名活动</h2><button id="reset-data" class="text-button" type="button">恢复演示数据</button></div><div id="activity-list" class="activity-list"></div></section>
+    <section id="student-panel" class="panel" hidden><h2>我的报名</h2><div class="table-wrap"><table><thead><tr><th>活动名称</th><th>活动时间</th><th>地点</th><th>状态</th></tr></thead><tbody id="student-registrations"></tbody></table></div></section>
+    <section id="teacher-panel" hidden><section class="panel"><h2>发布活动</h2><form id="activity-form" class="form-grid activity-form"><label>活动名称<input name="title" maxlength="50" required></label><label>活动时间<input name="time" type="datetime-local" required></label><label>活动地点<input name="location" maxlength="50" required></label><label>人数上限<input name="capacity" type="number" min="1" max="500" required></label><label>报名截止时间<input name="deadline" type="datetime-local" required></label><div class="form-actions"><button class="button primary" type="submit">发布活动</button></div></form></section><section class="panel"><h2>我发布的活动</h2><div class="table-wrap"><table><thead><tr><th>活动名称</th><th>时间</th><th>报名人数</th><th>状态</th><th>操作</th></tr></thead><tbody id="teacher-activities"></tbody></table></div></section></section>
+  </main>
+  <dialog id="roster-dialog"><h2 id="roster-title">报名名单</h2><ul id="roster-list"></ul><button id="roster-close" class="button primary">关闭</button></dialog>
+  <footer class="site-footer"><div class="shell">数据仅保存在当前浏览器；清除浏览器数据后记录会丢失。</div></footer>
+</body>
+</html>
