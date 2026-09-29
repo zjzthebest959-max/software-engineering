@@ -9,7 +9,7 @@
 </head>
 <body>
 <main class="workspace">
-  <header class="heading"><div><p class="eyebrow">CAMPUS · V1.0</p><h1>校园活动管理系统</h1><p class="subtitle">教师发布课程任务，学生在线报名参与。</p></div><div class="user-area"><span id="identity">尚未登录</span><button id="logout" class="quiet" hidden>退出登录</button></div></header>
+  <header class="heading"><div><p class="eyebrow">CAMPUS · V2.0</p><h1>校园活动管理系统</h1><p class="subtitle">课程任务、在线报名与校园私聊。</p></div><div class="user-area"><span id="identity">尚未登录</span><button id="logout" class="quiet" hidden>退出登录</button></div></header>
   <p id="notice" role="status" hidden></p>
   <section id="auth-panel" class="board auth-panel" aria-labelledby="auth-title"><h2 id="auth-title">登录校园账号</h2>
     <p class="hint">教师和学生使用各自的账号登录，系统自动识别身份。</p>
@@ -23,12 +23,42 @@
     </form>
   </section>
   <section id="workspace-panel" hidden>
+    <nav class="page-nav" aria-label="系统功能"><button id="nav-tasks" class="primary" aria-pressed="true">课程任务</button><button id="nav-messages" class="quiet" aria-pressed="false">消息</button></nav>
+    <div id="tasks-panel">
     <section class="stats" aria-label="任务概览"><div><span>可见任务</span><strong id="total">0</strong></div><div><span>可报名</span><strong id="available">0</strong></div><div><span id="personal-label">我的报名</span><strong id="personal">0</strong></div></section>
     <section class="board"><div class="toolbar"><div><h2 id="list-heading">课程任务</h2><p id="sync-status">等待同步</p></div><div class="filters"><label>课程<select id="course-filter"><option value="">全部课程</option></select></label><label>查看<select id="view-filter"></select></label><button id="refresh" class="quiet">刷新</button><button id="add-task" class="primary" hidden>＋ 发布任务</button></div></div>
       <div id="task-list" class="task-list"></div><div id="empty-state" class="empty" hidden><h3>暂无匹配任务</h3><p>试试其他筛选条件，或稍后刷新查看。</p></div>
     </section>
+    </div>
+    <section id="chat-panel" class="board chat-panel" aria-label="一对一私聊" hidden>
+      <aside class="contacts-pane" aria-labelledby="contacts-title">
+        <h2 id="contacts-title">联系人</h2><p class="hint">选择一个人，开始私聊。</p>
+        <form id="contact-search-form" class="contact-search">
+          <label>身份<select id="contact-role"><option value="">全部身份</option><option value="student">学生</option><option value="teacher">教师</option><option value="admin">系统管理员</option></select></label>
+          <label>姓名<input id="contact-query" maxlength="50" placeholder="搜索姓名或昵称"></label>
+          <button class="quiet" type="submit">查找 / 刷新</button>
+        </form>
+        <p id="contact-status" class="hint" role="status"></p>
+        <div id="contact-list" class="contact-list"></div>
+        <button id="contacts-more" class="quiet" hidden>加载更多联系人</button>
+      </aside>
+      <div class="conversation-pane">
+        <header class="conversation-heading"><div><h2 id="chat-title">选择联系人</h2><p id="chat-peer" class="hint">与学生、教师或系统管理员一对一交流</p></div><button id="chat-refresh" class="quiet" disabled>刷新消息</button></header>
+        <p id="chat-status" class="hint" role="status">消息仅对双方开放；数据库项目所有者拥有维护权限。</p>
+        <button id="chat-older" class="quiet history-button" hidden>加载更早消息</button>
+        <div id="message-scroll" class="message-scroll" tabindex="0" aria-label="聊天记录">
+          <div id="message-empty" class="empty"><h3>从一声问候开始</h3><p>选择左侧联系人后，即可查看历史消息或发送文字。</p></div>
+          <div id="message-list" class="message-list" role="list" aria-label="消息列表"></div>
+        </div>
+        <form id="chat-form" class="composer">
+          <label for="chat-input">发送消息</label>
+          <textarea id="chat-input" rows="3" disabled placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
+          <div class="composer-actions"><span class="hint">最多 2000 字符 · 无 AI 自动回复</span><button id="chat-send" class="primary" type="submit" disabled>发送</button></div>
+        </form>
+      </div>
+    </section>
   </section>
-  <footer>任务和报名记录由云端保存，可在不同设备登录使用。</footer>
+  <footer>任务、报名和私聊由云端保存；跨设备功能需完成对应数据库升级。</footer>
 </main>
 <dialog id="task-dialog" aria-labelledby="dialog-title"><form id="task-form">
   <div class="dialog-heading"><h2 id="dialog-title">发布任务</h2><button id="close-task" type="button" class="icon-button" aria-label="关闭">×</button></div>

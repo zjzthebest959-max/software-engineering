@@ -7,6 +7,9 @@
   };
   const sessionKey = `campus.cloud.session:${config.url}`;
   const priorityLabels = { high: '高', medium: '中', low: '低' };
+  const roleLabels = { student: '学生', teacher: '教师', admin: '系统管理员' };
+  const chat = { active: false, peer: null, contacts: [], messages: [], generation: 0, contactRequest: 0,
+    loading: false, sending: false, timer: null, hasOlder: false, hasContacts: false, drafts: new Map(), pending: new Map() };
   const state = { session: null, profile: null, tasks: [], editingId: null, register: false, syncing: false, generation: 0 };
   let refreshPromise = null;
   function notice(text, error = false) {
@@ -18,6 +21,7 @@
     return node;
   }
   function clearSession() {
+    resetChat();
     state.generation++; state.session = null; state.profile = null; state.tasks = [];
     localStorage.removeItem(sessionKey);
     $('task-dialog').close(); $('roster-dialog').close();
@@ -73,12 +77,13 @@
     const p = state.profile;
     $('auth-panel').hidden = Boolean(p); $('workspace-panel').hidden = !p;
     $('logout').hidden = !state.session;
-    $('identity').textContent = p ? `${p.display_name} · ${p.role === 'teacher' ? '教师' : '学生'}` : '尚未登录';
+    $('identity').textContent = p ? `${p.display_name} · ${roleLabels[p.role] || '未知身份'}` : '尚未登录';
     $('add-task').hidden = p?.role !== 'teacher';
-    $('personal-label').textContent = p?.role === 'teacher' ? '我发布的' : '我的报名';
+    $('personal-label').textContent = p?.role === 'admin' ? '个人参与（不适用）' : p?.role === 'teacher' ? '我发布的' : '我的报名';
     $('view-filter').replaceChildren(new Option('全部任务', 'all'), new Option('可报名', 'available'),
       new Option(p?.role === 'teacher' ? '我发布的' : '我的报名', 'personal'));
-    if (!p) $('task-list').replaceChildren();
+    if (p?.role === 'admin') $('view-filter').replaceChildren(new Option('全部任务','all'),new Option('可报名','available'));
+    if (!p) { $('task-list').replaceChildren(); showPage(false); }
   }
   function available(task) { return task.status === 'published' && new Date(task.deadline).getTime() > Date.now(); }
   function localDateTime(value) {
@@ -116,7 +121,7 @@
     if (state.profile.role === 'student') {
       controls.append(action(task.enrolled ? '已报名' : '报名', 'primary',
         () => mutate('campus_enroll',{p_id:task.id},'报名成功，记录已保存到云端。'), task.enrolled || !available(task)));
-    } else if (state.profile.id === task.teacher_id) {
+    } else if (state.profile.role === 'teacher' && state.profile.id === task.teacher_id) {
       controls.append(action('报名名单','quiet',async () => {
         const generation = state.generation;
         const rows = await rpc('campus_roster',{p_id:task.id});
@@ -169,6 +174,145 @@
     if (generation !== state.generation) return;
     state.profile = profile;
     renderIdentity(); await sync();
+  }
+  // 私聊只调用显式鉴权的云端 RPC。generation 防止切换用户/联系人后的过期响应串聊。
+  function chatStatus(message, error = false) {
+    $('chat-status').textContent = message;
+    $('chat-status').className = error ? 'hint chat-error' : 'hint';
+  }
+  function chatFailure(error) {
+    return /schema cache|could not find.*function/i.test(error.message)
+      ? '聊天数据库尚未升级，请先执行 upgrade-v2-chat.sql。当前没有发送任何模拟消息。' : error.message;
+  }
+  function stopChat() { if (chat.timer !== null) clearInterval(chat.timer); chat.timer = null; }
+  function scheduleChat() {
+    stopChat();
+    if (chat.active && state.profile && !document.hidden)
+      chat.timer = setInterval(() => loadMessages(false), 5000);
+  }
+  function showPage(messages) {
+    chat.active = messages && Boolean(state.profile);
+    $('tasks-panel').hidden = chat.active; $('chat-panel').hidden = !chat.active;
+    $('nav-tasks').className = chat.active ? 'quiet' : 'primary';
+    $('nav-messages').className = chat.active ? 'primary' : 'quiet';
+    $('nav-tasks').setAttribute('aria-pressed', String(!chat.active));
+    $('nav-messages').setAttribute('aria-pressed', String(chat.active));
+    scheduleChat();
+  }
+  function resetChat() {
+    stopChat(); chat.generation++; chat.contactRequest++;
+    chat.active = false; chat.peer = null; chat.contacts = []; chat.messages = [];
+    chat.loading = false; chat.sending = false; chat.hasOlder = false;
+    chat.drafts.clear(); chat.pending.clear();
+    $('chat-input').value = ''; $('chat-input').disabled = true; $('chat-send').disabled = true;
+    $('message-list').replaceChildren(); $('contact-list').replaceChildren();
+    $('message-empty').hidden = false; $('chat-title').textContent = '选择联系人';
+    $('chat-peer').textContent = '与学生、教师或系统管理员一对一交流';
+    $('contact-status').textContent = ''; $('contacts-more').hidden = true;
+    $('chat-older').hidden = true; $('chat-refresh').disabled = true;
+    chatStatus('消息仅对双方开放；数据库项目所有者拥有维护权限。');
+  }
+  function renderContacts() {
+    $('contact-list').replaceChildren(...chat.contacts.map(peer => {
+      const button = el('button', `contact ${chat.peer?.id === peer.id ? 'selected' : ''}`);
+      button.type = 'button'; button.setAttribute('aria-pressed', String(chat.peer?.id === peer.id));
+      button.append(el('strong','',peer.display_name),el('span','hint',`${roleLabels[peer.role] || '用户'} · ${peer.id.slice(-8)}`));
+      button.addEventListener('click', () => selectPeer(peer)); return button;
+    }));
+  }
+  async function loadContacts(reset = true) {
+    if (!state.profile) return;
+    const seq = ++chat.contactRequest;
+    const offset = reset ? 0 : chat.contacts.length;
+    if (reset) {chat.contacts = []; renderContacts(); $('contacts-more').hidden = true;}
+    $('contacts-more').disabled = true; $('contact-status').textContent = '正在查找联系人…';
+    try {
+      const rows = await rpc('campus_chat_contacts', { p_role: $('contact-role').value || null,
+        p_query: $('contact-query').value.trim(), p_offset: offset });
+      if (seq !== chat.contactRequest) return;
+      if (!Array.isArray(rows)) throw new Error('联系人响应格式异常');
+      chat.contacts = [...new Map([...(reset ? [] : chat.contacts),...rows].filter(p => p.id !== state.profile.id).map(p=>[p.id,p])).values()];
+      chat.hasContacts = rows.length === 50; $('contacts-more').hidden = !chat.hasContacts;
+      renderContacts(); $('contact-status').textContent = chat.contacts.length ? `已显示 ${chat.contacts.length} 位联系人` : '暂无匹配联系人，可尝试其他身份或姓名。';
+    } catch(error) { if (seq === chat.contactRequest) $('contact-status').textContent = chatFailure(error); }
+    finally { if (seq === chat.contactRequest) $('contacts-more').disabled = false; }
+  }
+  async function openMessages() { showPage(true); await loadContacts(true); await loadMessages(false); }
+  async function selectPeer(peer) {
+    if (chat.peer) chat.drafts.set(chat.peer.id, $('chat-input').value);
+    chat.generation++; chat.peer = peer; chat.messages = []; chat.loading = false; chat.sending = false; chat.hasOlder = false;
+    $('chat-title').textContent = peer.display_name; $('chat-peer').textContent = `${roleLabels[peer.role] || '用户'} · ${peer.id.slice(-8)} · 一对一私聊`;
+    $('chat-input').value = chat.drafts.get(peer.id) || ''; $('chat-input').disabled = false;
+    $('chat-send').disabled = false; $('chat-refresh').disabled = false;
+    renderContacts(); renderMessages(); await loadMessages(false); $('chat-input').focus();
+  }
+  function renderMessages(older = false) {
+    const scroll = $('message-scroll'); const height = scroll.scrollHeight; const top = scroll.scrollTop;
+    const nearBottom = height - top - scroll.clientHeight < 90;
+    $('message-list').replaceChildren(...chat.messages.map(m => {
+      const item = el('div', `message ${m.sender_id === state.profile.id ? 'mine' : 'theirs'}`);
+      item.setAttribute('role','listitem');
+      item.append(el('p','message-body',m.body),el('span','message-time',`${m.sender_id === state.profile.id ? '我' : chat.peer.display_name} · ${displayDate(m.created_at)}`));
+      return item;
+    }));
+    $('message-empty').hidden = chat.messages.length !== 0;
+    $('message-empty').replaceChildren(el('h3','','还没有消息'),el('p','','发送第一句问候，开始你们的对话。'));
+    $('chat-older').hidden = !chat.hasOlder;
+    if (older) scroll.scrollTop = top + scroll.scrollHeight - height;
+    else if (nearBottom || chat.messages.length <= 1) scroll.scrollTop = scroll.scrollHeight;
+  }
+  function mergeMessages(rows) {
+    const me = state.profile.id, peer = chat.peer.id;
+    if (!Array.isArray(rows) || rows.some(m=>!m.id || typeof m.body !== 'string' ||
+      !((m.sender_id===me && m.recipient_id===peer)||(m.sender_id===peer && m.recipient_id===me)))) throw new Error('消息响应与当前会话不一致');
+    chat.messages = [...new Map([...chat.messages,...rows].map(m=>[m.id,m])).values()]
+      .sort((a,b)=>a.created_at.localeCompare(b.created_at)||a.id.localeCompare(b.id));
+  }
+  async function loadMessages(older = false) {
+    if (!state.profile || !chat.peer || chat.loading || !chat.active || document.hidden) return;
+    const gen = chat.generation, peer = chat.peer.id;
+    const valid = () => gen === chat.generation && chat.peer?.id === peer && Boolean(state.profile);
+    chat.loading = true; $('chat-older').disabled = true; $('chat-refresh').disabled = true;
+    let cursor = older ? chat.messages[0] : null;
+    const known = new Set(chat.messages.map(m=>m.id)); const collected = [];
+    try {
+      let rows;
+      // 若后台期间超过 50 条新消息，向前追页直到与已加载历史衔接，避免静默漏消息。
+      do {
+        rows = await rpc('campus_chat_messages',{p_peer:peer,p_before_time:cursor?.created_at || null,p_before_id:cursor?.id || null});
+        if (!valid()) return;
+        if (!Array.isArray(rows)) throw new Error('消息响应格式异常');
+        collected.push(...rows);
+        if (older || !known.size || rows.length < 50 || rows.some(m=>known.has(m.id))) break;
+        if (cursor?.id === rows[0]?.id) throw new Error('历史分页未推进，请重试');
+        cursor = rows[0];
+      } while(valid());
+      if (!known.size || older) chat.hasOlder = rows.length === 50;
+      mergeMessages(collected); renderMessages(older);
+      chatStatus(chat.messages.length ? '消息已同步 · 每 5 秒更新' : '还没有消息，发送第一句问候吧。');
+    } catch(error) { if(valid()) chatStatus(chatFailure(error),true); }
+    finally { if(valid()) {chat.loading=false; $('chat-older').disabled=false; $('chat-refresh').disabled=false;} }
+  }
+  async function sendMessage() {
+    if (!state.profile || !chat.peer || chat.sending) return;
+    const raw = $('chat-input').value, body = raw.trim();
+    if (!body || [...body].length>2000) {chatStatus('消息需为 1–2000 字符，不能只输入空白。',true);return;}
+    const peer = chat.peer.id, gen = chat.generation, account = state.generation;
+    let pending = chat.pending.get(peer);
+    if (!pending || pending.body !== body) {pending={body,id:crypto.randomUUID()};chat.pending.set(peer,pending);}
+    chat.sending = true; $('chat-send').disabled = true; chatStatus('正在发送…');
+    try {
+      const message = await rpc('campus_chat_send',{p_peer:peer,p_body:body,p_client_id:pending.id});
+      if (account !== state.generation) return;
+      if(chat.pending.get(peer)===pending) chat.pending.delete(peer);
+      if(chat.drafts.get(peer)===raw) chat.drafts.delete(peer);
+      if(gen!==chat.generation) return;
+      mergeMessages([message]); renderMessages();
+      if($('chat-input').value===raw) $('chat-input').value='';
+      $('message-scroll').scrollTop=$('message-scroll').scrollHeight;
+      chatStatus('已保存到云端（不代表对方已读）');
+    } catch(error) { if(gen===chat.generation) chatStatus(`${chatFailure(error)} 输入已保留，可点击发送重试。`,true); }
+    finally { if(gen===chat.generation) {chat.sending=false; $('chat-send').disabled=false;} }
   }
   function edit(task = null) {
     if (state.profile?.role !== 'teacher') return;
@@ -243,8 +387,22 @@
   $('course-filter').addEventListener('change',renderTasks);
   $('view-filter').addEventListener('change',renderTasks);
   $('refresh').addEventListener('click',() => sync().catch(error => notice(error.message,true)));
+  $('nav-messages').addEventListener('click',openMessages);
+  $('nav-tasks').addEventListener('click',() => showPage(false));
+  $('contact-role').addEventListener('change',() => loadContacts(true));
+  $('contact-search-form').addEventListener('submit',event => {event.preventDefault();return loadContacts(true);});
+  $('contacts-more').addEventListener('click',() => loadContacts(false));
+  $('chat-refresh').addEventListener('click',() => loadMessages(false));
+  $('chat-older').addEventListener('click',() => loadMessages(true));
+  $('chat-form').addEventListener('submit',event => {event.preventDefault();return sendMessage();});
+  $('chat-input').addEventListener('keydown',event => {
+    if (event.key==='Enter' && !event.shiftKey && !event.isComposing && event.keyCode!==229) {event.preventDefault();return sendMessage();}
+  });
   window.addEventListener('online',() => sync().catch(error => notice(error.message,true)));
-  document.addEventListener('visibilitychange',() => { if (!document.hidden) sync().catch(error => notice(error.message,true)); });
+  document.addEventListener('visibilitychange',() => {
+    scheduleChat();
+    if (!document.hidden) {sync().catch(error => notice(error.message,true));loadMessages(false);}
+  });
   window.addEventListener('storage',event => {
     if (event.key === sessionKey) location.reload();
   });
