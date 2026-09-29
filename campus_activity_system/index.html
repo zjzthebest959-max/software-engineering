@@ -1,22 +1,41 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>校园活动管理系统 V1.0</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="app.js" defer></script>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="supabase-url" content="https://flgfbxjjkfiymdmpxqus.supabase.co">
+  <meta name="supabase-publishable-key" content="sb_publishable_cFZTUaUrVpTABIxywSHvfg_QdeVdOaE">
+  <title>校园活动管理系统</title>
+  <link rel="stylesheet" href="styles.css"><script src="app.js" defer></script>
 </head>
 <body>
-  <header class="site-header"><div class="shell header-content"><div><h1>校园活动管理系统</h1><p>V1.0 · 最小原型</p></div><div class="user-bar"><span id="current-user">未登录</span><button id="logout-button" class="button outline" hidden>退出登录</button></div></div></header>
-  <main class="shell">
-    <p id="notice" class="notice" hidden aria-live="polite"></p>
-    <section id="auth-section" class="panel auth-panel"><h2>注册或登录</h2><p class="hint">演示账号：教师 <code>teacher / 123456</code>，学生 <code>student / 123456</code>。</p><form id="auth-form" class="form-grid"><label>用户名<input name="username" maxlength="20" required></label><label>密码<input name="password" type="password" maxlength="30" required></label><label>身份<select name="role"><option value="student">学生</option><option value="teacher">教师</option></select></label><div class="form-actions"><button class="button primary" type="submit" value="login">登录</button><button class="button secondary" type="submit" value="register">注册</button></div></form></section>
-    <section class="panel"><div class="section-title"><h2>可报名活动</h2><button id="reset-data" class="text-button" type="button">恢复演示数据</button></div><div id="activity-list" class="activity-list"></div></section>
-    <section id="student-panel" class="panel" hidden><h2>我的报名</h2><div class="table-wrap"><table><thead><tr><th>活动名称</th><th>活动时间</th><th>地点</th><th>状态</th></tr></thead><tbody id="student-registrations"></tbody></table></div></section>
-    <section id="teacher-panel" hidden><section class="panel"><h2>发布活动</h2><form id="activity-form" class="form-grid activity-form"><label>活动名称<input name="title" maxlength="50" required></label><label>活动时间<input name="time" type="datetime-local" required></label><label>活动地点<input name="location" maxlength="50" required></label><label>人数上限<input name="capacity" type="number" min="1" max="500" required></label><label>报名截止时间<input name="deadline" type="datetime-local" required></label><div class="form-actions"><button class="button primary" type="submit">发布活动</button></div></form></section><section class="panel"><h2>我发布的活动</h2><div class="table-wrap"><table><thead><tr><th>活动名称</th><th>时间</th><th>报名人数</th><th>状态</th><th>操作</th></tr></thead><tbody id="teacher-activities"></tbody></table></div></section></section>
-  </main>
-  <dialog id="roster-dialog"><h2 id="roster-title">报名名单</h2><ul id="roster-list"></ul><button id="roster-close" class="button primary">关闭</button></dialog>
-  <footer class="site-footer"><div class="shell">数据仅保存在当前浏览器；清除浏览器数据后记录会丢失。</div></footer>
+<main class="workspace">
+  <header class="heading"><div><p class="eyebrow">CAMPUS · V2.0</p><h1>校园活动管理系统</h1><p class="subtitle">教师发布课程任务，学生在线报名参与。</p></div><div class="user-area"><span id="identity">尚未登录</span><button id="logout" class="quiet" hidden>退出登录</button></div></header>
+  <p id="notice" role="status" hidden></p>
+  <section id="auth-panel" class="board auth-panel" aria-labelledby="auth-title"><h2 id="auth-title">登录校园账号</h2>
+    <p class="hint">教师和学生使用各自的账号登录，系统自动识别身份。</p>
+    <form id="auth-form">
+      <label id="name-field" hidden>姓名或昵称<input name="display_name" maxlength="50" autocomplete="name"></label>
+      <label>邮箱<input name="email" type="email" required autocomplete="username"></label>
+      <label>密码<input name="password" type="password" required minlength="8" maxlength="128" autocomplete="current-password"></label>
+      <p class="hint" id="register-hint" hidden>注册后为学生身份；教师账号由项目管理者授权。请查收邮箱中的验证邮件。</p>
+      <div class="dialog-actions"><button id="auth-submit" class="primary" type="submit">登录</button><button id="auth-mode" class="quiet" type="button">注册学生账号</button></div>
+    </form>
+  </section>
+  <section id="workspace-panel" hidden>
+    <section class="stats" aria-label="任务概览"><div><span>可见任务</span><strong id="total">0</strong></div><div><span>可报名</span><strong id="available">0</strong></div><div><span id="personal-label">我的报名</span><strong id="personal">0</strong></div></section>
+    <section class="board"><div class="toolbar"><div><h2 id="list-heading">课程任务</h2><p id="sync-status">等待同步</p></div><div class="filters"><label>课程<select id="course-filter"><option value="">全部课程</option></select></label><label>查看<select id="view-filter"></select></label><button id="refresh" class="quiet">刷新</button><button id="add-task" class="primary" hidden>＋ 发布任务</button></div></div>
+      <div id="task-list" class="task-list"></div><div id="empty-state" class="empty" hidden><h3>暂无匹配任务</h3><p>试试其他筛选条件，或稍后刷新查看。</p></div>
+    </section>
+  </section>
+  <footer>任务和报名记录由云端保存，可在不同设备登录使用。</footer>
+</main>
+<dialog id="task-dialog" aria-labelledby="dialog-title"><form id="task-form">
+  <div class="dialog-heading"><h2 id="dialog-title">发布任务</h2><button id="close-task" type="button" class="icon-button" aria-label="关闭">×</button></div>
+  <label>任务名称<input name="title" required maxlength="100" placeholder="例如：软件工程课程设计"></label>
+  <div class="form-row"><label>所属课程<input name="course" required maxlength="50" placeholder="软件工程"></label><label>分类<input name="category" required maxlength="50" value="课程作业"></label></div>
+  <div class="form-row"><label>报名截止（本地时间）<input name="deadline" type="datetime-local" required></label><label>优先级<select name="priority"><option value="high">高</option><option value="medium" selected>中</option><option value="low">低</option></select></label></div>
+  <p id="form-error" role="alert" hidden></p><div class="dialog-actions"><button id="cancel-edit" class="quiet" type="button">取消</button><button class="primary" type="submit">保存并发布</button></div>
+</form></dialog>
+<dialog id="roster-dialog" aria-labelledby="roster-title"><h2 id="roster-title">报名名单</h2><p id="roster-note" class="hint"></p><ul id="roster-list"></ul><button id="close-roster" class="primary">关闭</button></dialog>
 </body>
 </html>

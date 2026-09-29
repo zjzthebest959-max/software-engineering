@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: campus-activity-cloud-v2
+    runtime: static
+    repo: https://github.com/zjzthebest959-max/software-engineering
+    branch: codex/campus-cloud
+    rootDir: campus_activity_system
+    buildCommand: mkdir -p public && cp index.html styles.css app.js public/
+    staticPublishPath: ./public
+    autoDeployTrigger: off
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
