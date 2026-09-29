@@ -1,20 +1,24 @@
-# 校园活动管理系统 V2.0（云端教师发布 / 学生报名）
+# 校园活动管理系统 V1.0（云端教师发布 / 学生报名）
 
 前端：index.html、styles.css、app.js，纯原生 JavaScript，使用 fetch 调用 Supabase API，无 npm 依赖。
 
 ## 当前状态
 
-云端代码、项目 URL 和公开密钥已配置。六个业务函数的真实匿名请求均返回 401 / 42501，确认接口存在且拒绝匿名操作。前端模拟接口检查及 JavaScript 语法检查已通过；教师/学生登录后的云端业务和跨设备验收尚未完成。
+本地已改为用户名密码注册登录，支持学生和教师自行注册，无邮箱输入、无邀请码。前端模拟接口检查及 JavaScript 语法检查已通过。当前线上仍是旧版：本次尚未执行数据库升级、关闭邮箱确认或推送部署；真实注册与跨设备验收待云端配置完成后进行。
+
+用户名使用 3–32 位字母、数字或下划线，不区分大小写；姓名可使用中文；密码 8–128 位。底层把用户名映射到 `用户名@accounts.campus-demo.example`，仅作为 Supabase Auth 内部账号标识，不是真实邮箱，不收发邮件。密码仍由 Supabase Auth 管理，不自行存储明文密码。此 Demo 暂不支持邮件找回密码。
 
 ## 免费部署
 
 1. 登录 Supabase Dashboard，新建 Free 组织下的项目。仅选择免费档，不启用付费升级。
-2. 当前项目已初始化业务函数，无需重复执行 database.sql。脚本保留供新项目首次初始化使用，不支持重复执行。
+2. 当前项目已初始化业务函数：在 SQL Editor 执行 `upgrade-v1-auth.sql`，使新账号按选择的学生/教师身份创建。该升级脚本可以重复执行，不删除数据，不改变已有用户身份。`database.sql` 仅供新项目首次初始化，不要在现有项目重新执行。
 3. 在项目 API 设置复制 Project URL 和 publishable key（或旧版 anon key），填入 index.html 顶部两个对应的 meta 标签。公开密钥可以出现在前端；绝不可填入 secret key、service_role key 或数据库密码。
-4. 邮箱密码登录通过 Supabase Auth。保留邮箱验证；若需要向所有学生自动发验证邮件，应配置项目自己的 SMTP。Supabase 默认邮件服务有发送限制，部署前必须验证收件能力。课堂验证也可以由项目管理员在 Auth 后台创建已确认的演示账号。
-5. 用户默认注册为学生。教师先注册，再由项目所有者在 SQL Editor 按 database.sql 末尾说明授权，浏览器无法自行切换角色。
-6. 将前端文件发布到 Render Static Site：Root Directory 为 campus_activity_system，Build Command 留空，Publish Directory 为 `.`。静态网站与 Supabase 是两项独立配置。旧 Flask Web Service 不适用于此版本。
-7. 在 Supabase Auth URL Configuration 填写真实 Render 网站地址（Site URL 与允许的 Redirect URL），再验证邮箱确认链接。
+4. 在 Supabase Authentication 的注册设置中关闭 `Confirm email`，保持邮箱密码注册开启。这是一次性项目配置，不需要每位用户提供邮箱。官方说明：https://supabase.com/docs/guides/auth/general-configuration 。未关闭时前端会阻止注册，避免产生无法验证的账号。
+5. 学生和教师均可自行注册，无邀请码。角色在创建账号时存入业务表，不会随以后修改 Auth metadata 自动改变；所有任务写入仍由数据库校验身份和所有权。公开教师注册只适合课堂演示，不代表验证了真实教师资格。
+6. 用户批准推送后，将前端发布到现有 Render Static Site。使用仓库根目录 render.yaml：Root Directory 为 campus_activity_system，构建命令 `mkdir -p public && cp index.html styles.css app.js public/`，Publish Directory 为 `public`。不要公开发布整个项目目录中的 SQL 和测试文件。
+7. 当前 Render 服务自动部署关闭，推送到 codex/campus-cloud 后还需手动 Deploy latest commit。网址中的 cloud-v2 是原服务名称，页面版本为 V1.0；本次不新建服务、不更换网址。
+
+旧邮箱账号及其任务保留，不会自动合并到新用户名账号。旧账号如需沿用，应由项目管理者通过 Supabase Auth 管理功能将登录标识改为相应的内部用户名地址，保留用户 UUID；切勿删除重建，否则原任务所有权不会随之转移。
 
 ## 功能和规则
 
@@ -28,7 +32,7 @@
 
 ## 上线前真实验收
 
-在两台设备 / 两个独立浏览器分别登录授权教师和学生：
+在两台设备 / 两个独立浏览器分别注册教师和学生，再以相同用户名登录：
 
 1. 教师发布软件工程任务，设未来报名截止时间。
 2. 学生刷新并看到该任务，点击报名；教师刷新名单后能看到学生。
@@ -39,6 +43,8 @@
 7. 手机和笔记本检查表单、弹窗、筛选、加载与网络错误状态。
 
 上述云端验收需要真实项目配置，不能用本地模拟测试替代。
+
+本地回归命令（在项目目录运行）：`E:\node.exe tests\auth-contract.cjs .`。测试使用模拟 DOM / HTTP 接口，涵盖用户名规范化、角色注册参数、登录不提交角色、非法用户名、邮箱确认配置拦截、发布和报名界面，不等同于数据库实际权限测试。
 
 ## 费用边界
 

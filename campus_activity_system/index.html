@@ -9,16 +9,17 @@
 </head>
 <body>
 <main class="workspace">
-  <header class="heading"><div><p class="eyebrow">CAMPUS · V2.0</p><h1>校园活动管理系统</h1><p class="subtitle">教师发布课程任务，学生在线报名参与。</p></div><div class="user-area"><span id="identity">尚未登录</span><button id="logout" class="quiet" hidden>退出登录</button></div></header>
+  <header class="heading"><div><p class="eyebrow">CAMPUS · V1.0</p><h1>校园活动管理系统</h1><p class="subtitle">教师发布课程任务，学生在线报名参与。</p></div><div class="user-area"><span id="identity">尚未登录</span><button id="logout" class="quiet" hidden>退出登录</button></div></header>
   <p id="notice" role="status" hidden></p>
   <section id="auth-panel" class="board auth-panel" aria-labelledby="auth-title"><h2 id="auth-title">登录校园账号</h2>
     <p class="hint">教师和学生使用各自的账号登录，系统自动识别身份。</p>
     <form id="auth-form">
       <label id="name-field" hidden>姓名或昵称<input name="display_name" maxlength="50" autocomplete="name"></label>
-      <label>邮箱<input name="email" type="email" required autocomplete="username"></label>
+      <label>用户名<input name="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_]{3,32}" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="3–32 位字母、数字或下划线"></label>
+      <label id="role-field" hidden>注册身份<select name="role"><option value="student">学生</option><option value="teacher">教师</option></select></label>
       <label>密码<input name="password" type="password" required minlength="8" maxlength="128" autocomplete="current-password"></label>
-      <p class="hint" id="register-hint" hidden>注册后为学生身份；教师账号由项目管理者授权。请查收邮箱中的验证邮件。</p>
-      <div class="dialog-actions"><button id="auth-submit" class="primary" type="submit">登录</button><button id="auth-mode" class="quiet" type="button">注册学生账号</button></div>
+      <p class="hint" id="register-hint" hidden>无需邮箱或邀请码。用户名不区分大小写，密码至少 8 位。课堂演示开放教师注册，请按实际身份选择；注册后不能自行切换身份。</p>
+      <div class="dialog-actions"><button id="auth-submit" class="primary" type="submit">登录</button><button id="auth-mode" class="quiet" type="button">注册账号</button></div>
     </form>
   </section>
   <section id="workspace-panel" hidden>

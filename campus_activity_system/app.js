@@ -30,20 +30,20 @@
     localStorage.setItem(sessionKey, JSON.stringify(session));
     state.session = session;
   }
-  async function request(path, body, token) {
+  async function request(path, body, token, method = 'POST') {
     const headers = { apikey: config.key, 'Content-Type': 'application/json' };
     if (token) headers.Authorization = `Bearer ${token}`;
     let response;
     try {
-      response = await fetch(`${config.url}${path}`, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(20000) });
+      response = await fetch(`${config.url}${path}`, { method, headers, ...(method === 'GET' ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(20000) });
     } catch (error) { throw new Error('网络连接失败，请检查网络后重试。操作结果不确定时，请先刷新列表确认。'); }
     const raw = await response.text();
     let data;
     try { data = raw ? JSON.parse(raw) : null; } catch (error) { throw new Error('云端响应异常，请稍后重试'); }
     if (!response.ok) {
       const code = data?.error_code || data?.code;
-      const messages = { invalid_credentials: '邮箱或密码不正确', email_not_confirmed: '请先完成邮箱验证',
-        over_email_send_rate_limit: '验证邮件发送过于频繁，请稍后重试', user_already_exists: '该邮箱已注册，请直接登录' };
+      const messages = { invalid_credentials: '用户名或密码不正确', email_not_confirmed: '账号未激活，请联系项目管理者检查云端邮箱确认设置',
+        over_email_send_rate_limit: '云端邮箱确认尚未关闭，请联系项目管理者', user_already_exists: '该用户名已注册，请直接登录' };
       const failure = new Error(messages[code] || data?.msg || data?.message || data?.error_description || '云端请求失败');
       failure.status = response.status;
       throw failure;
@@ -197,9 +197,10 @@
   });
   $('auth-mode').addEventListener('click', () => {
     state.register = !state.register;
-    $('auth-title').textContent = state.register ? '注册学生账号' : '登录校园账号';
+    $('auth-title').textContent = state.register ? '注册校园账号' : '登录校园账号';
     $('auth-submit').textContent = state.register ? '注册' : '登录';
-    $('auth-mode').textContent = state.register ? '已有账号，去登录' : '注册学生账号';
+    $('auth-mode').textContent = state.register ? '已有账号，去登录' : '注册账号';
+    $('role-field').hidden = !state.register;
     $('name-field').hidden = !state.register; $('register-hint').hidden = !state.register;
     $('auth-form').elements.namedItem('display_name').required = state.register;
     $('auth-form').elements.namedItem('password').autocomplete = state.register ? 'new-password' : 'current-password';
@@ -211,10 +212,20 @@
     $('auth-submit').disabled = true; $('auth-mode').disabled = true;
     try {
       if (register && !values.display_name.trim()) throw new Error('请输入姓名或昵称');
+      const username = values.username.trim().toLowerCase();
+      if (!/^[a-z0-9_]{3,32}$/.test(username)) throw new Error('用户名需为 3–32 位字母、数字或下划线');
+      if (values.password.length < 8 || values.password.length > 128) throw new Error('密码需为 8–128 位');
+      if (register) {
+        if (!['student','teacher'].includes(values.role)) throw new Error('请选择学生或教师身份');
+        // Supabase 使用内部邮箱格式标识账号；不收集真实邮箱，也不发送邮件。
+        const settings = await request('/auth/v1/settings', undefined, undefined, 'GET');
+        if (settings?.mailer_autoconfirm !== true) throw new Error('云端尚未关闭邮箱确认，请由项目管理者关闭 Confirm email 后再注册');
+      }
       const data = await request(register ? '/auth/v1/signup' : '/auth/v1/token?grant_type=password',
-        { email: values.email.trim(), password: values.password, ...(register ? { data: { display_name: values.display_name.trim() } } : {}) });
+        { email: `${username}@accounts.campus-demo.example`, password: values.password,
+          ...(register ? { data: { display_name: values.display_name.trim(), role: values.role } } : {}) });
       $('auth-form').elements.namedItem('password').value = '';
-      if (!data.access_token) { notice('注册申请已提交，请查收验证邮件后登录；已注册邮箱可直接尝试登录。'); return; }
+      if (!data.access_token) throw new Error('注册未返回登录会话，请联系项目管理者检查邮箱确认设置');
       setSession(data); state.generation++; await enter(); notice('登录成功。');
     } catch (error) { notice(error.message,true); }
     finally { $('auth-submit').disabled = false; $('auth-mode').disabled = false; }

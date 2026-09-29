@@ -35,7 +35,8 @@ create function public.campus_create_profile() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
   insert into public.campus_profiles(id, display_name, role)
-  values(new.id, left(coalesce(nullif(btrim(new.raw_user_meta_data->>'display_name'),''),'同学'),50), 'student');
+  values(new.id, left(coalesce(nullif(btrim(new.raw_user_meta_data->>'display_name'),''),'同学'),50),
+    case when new.raw_user_meta_data->>'role' = 'teacher' then 'teacher' else 'student' end);
   return new;
 end;
 $$;
@@ -148,6 +149,6 @@ grant execute on function public.campus_me(),public.campus_list_tasks(),
   public.campus_enroll(uuid),public.campus_roster(uuid) to authenticated;
 commit;
 
--- 教师授权仅由项目所有者在 SQL Editor 执行。先让教师注册，再用其邮箱定位：
--- update public.campus_profiles set role='teacher'
--- where id=(select id from auth.users where email='教师注册邮箱');
+-- V1 课堂演示：学生和教师均可自行注册，无邀请码。
+-- 角色只在创建账号时写入业务表；以后修改 Auth metadata 不会改变业务角色。
+-- 正式使用前必须增加教师身份审核。已有项目请执行 upgrade-v1-auth.sql，不要重跑本文件。
