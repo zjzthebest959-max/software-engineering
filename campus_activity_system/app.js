@@ -10,6 +10,7 @@
   const roleLabels = { student: '学生', teacher: '教师', admin: '系统管理员' };
   const chat = { active: false, peer: null, contacts: [], messages: [], generation: 0, contactRequest: 0,
     loading: false, sending: false, timer: null, hasOlder: false, hasContacts: false, drafts: new Map(), pending: new Map() };
+  const inbox = { rows: [], sequence: 0, loading: false, viewGeneration: 0 };
   const state = { session: null, profile: null, tasks: [], editingId: null, register: false, syncing: false, generation: 0 };
   let refreshPromise = null;
   function notice(text, error = false) {
@@ -173,7 +174,7 @@
     const profile = await rpc('campus_me');
     if (generation !== state.generation) return;
     state.profile = profile;
-    renderIdentity(); await sync();
+    renderIdentity(); scheduleChat(); loadInbox(); await sync();
   }
   // 私聊只调用显式鉴权的云端 RPC。generation 防止切换用户/联系人后的过期响应串聊。
   function chatStatus(message, error = false) {
@@ -182,15 +183,16 @@
   }
   function chatFailure(error) {
     return /schema cache|could not find.*function/i.test(error.message)
-      ? '聊天数据库尚未升级，请先执行 upgrade-v2-chat.sql。当前没有发送任何模拟消息。' : error.message;
+      ? '聊天数据库尚未升级，请依次执行 upgrade-v2-chat.sql 和 upgrade-v2-inbox.sql。' : error.message;
   }
   function stopChat() { if (chat.timer !== null) clearInterval(chat.timer); chat.timer = null; }
   function scheduleChat() {
     stopChat();
-    if (chat.active && state.profile && !document.hidden)
-      chat.timer = setInterval(() => loadMessages(false), 5000);
+    if (state.profile && !document.hidden)
+      chat.timer = setInterval(async () => {await loadMessages(false); await loadInbox();}, 5000);
   }
   function showPage(messages) {
+    if (chat.active !== (messages && Boolean(state.profile))) inbox.viewGeneration++;
     chat.active = messages && Boolean(state.profile);
     $('tasks-panel').hidden = chat.active; $('chat-panel').hidden = !chat.active;
     $('nav-tasks').className = chat.active ? 'quiet' : 'primary';
@@ -201,6 +203,10 @@
   }
   function resetChat() {
     stopChat(); chat.generation++; chat.contactRequest++;
+    inbox.sequence++; inbox.viewGeneration++; inbox.rows = []; inbox.loading = false;
+    $('inbox-list').replaceChildren(); $('nav-unread').hidden = true; $('nav-unread').textContent = '';
+    $('inbox-health').textContent = ''; $('inbox-status').textContent = ''; $('inbox-empty').hidden = true;
+    $('nav-messages').setAttribute('aria-label','消息');
     chat.active = false; chat.peer = null; chat.contacts = []; chat.messages = [];
     chat.loading = false; chat.sending = false; chat.hasOlder = false;
     chat.drafts.clear(); chat.pending.clear();
@@ -211,6 +217,60 @@
     $('contact-status').textContent = ''; $('contacts-more').hidden = true;
     $('chat-older').hidden = true; $('chat-refresh').disabled = true;
     chatStatus('消息仅对双方开放；数据库项目所有者拥有维护权限。');
+  }
+  function renderInbox() {
+    $('inbox-list').replaceChildren(...inbox.rows.map(row => {
+      const button = el('button',`inbox-item ${chat.peer?.id===row.peer_id?'selected':''}`);
+      button.type='button';button.setAttribute('aria-pressed',String(chat.peer?.id===row.peer_id));
+      const header=el('span','inbox-item-heading');
+      header.append(el('strong','',row.display_name),el('span','inbox-time',displayDate(row.last_at)));
+      const preview=el('span','inbox-preview');
+      preview.append(el('span','inbox-summary',`${row.last_sender_id===state.profile.id?'我：':''}${row.last_body}`));
+      if(row.unread_count>0){const badge=el('span','unread-badge',row.unread_count>99?'99+':String(row.unread_count));badge.setAttribute('aria-label',`${row.unread_count} 条未读`);preview.append(badge);}
+      button.append(header,el('span','inbox-role',`${roleLabels[row.role] || '用户'} · ${row.peer_id.slice(-8)}`),preview);
+      button.addEventListener('click',()=>selectPeer({id:row.peer_id,display_name:row.display_name,role:row.role}));
+      return button;
+    }));
+    $('inbox-empty').hidden=inbox.rows.length!==0;
+  }
+  async function loadInbox(force=false) {
+    if(!state.profile || document.hidden || (inbox.loading && !force)) return;
+    const seq=++inbox.sequence;inbox.loading=true;
+    try {
+      const data=await rpc('campus_chat_inbox');
+      if(seq!==inbox.sequence || !state.profile) return;
+      if(!Array.isArray(data?.conversations) || !Number.isSafeInteger(data.total_unread) || data.total_unread<0) throw new Error('收件箱响应格式异常');
+      inbox.rows=data.conversations;renderInbox();
+      $('nav-unread').textContent=data.total_unread>99?'99+':String(data.total_unread);
+      $('nav-unread').hidden=data.total_unread===0;
+      $('nav-messages').setAttribute('aria-label',data.total_unread?`消息，${data.total_unread} 条未读`:'消息，无未读');
+      $('inbox-status').textContent=data.total_unread?`${data.total_unread} 条未读消息 · 每 5 秒检查`:'暂无未读消息 · 每 5 秒检查';
+      $('inbox-health').textContent='';
+    } catch(error) {
+      if(seq===inbox.sequence){$('inbox-status').textContent=chatFailure(error);$('inbox-health').textContent='消息提醒同步失败，请打开收件箱重试';}
+    } finally {if(seq===inbox.sequence)inbox.loading=false;}
+  }
+  async function showSidebar(contacts=false) {
+    $('inbox-pane').hidden=contacts;$('contacts-directory').hidden=!contacts;
+    $('tab-inbox').className=contacts?'quiet':'primary';$('tab-contacts').className=contacts?'primary':'quiet';
+    $('tab-inbox').setAttribute('aria-pressed',String(!contacts));$('tab-contacts').setAttribute('aria-pressed',String(contacts));
+    if(contacts) await loadContacts(true); else await loadInbox(true);
+  }
+  async function markLoadedRead(gen,view,peer) {
+    const visible=()=>state.profile && gen===chat.generation && view===inbox.viewGeneration && chat.peer?.id===peer && chat.active && !document.hidden;
+    if(!visible()) return;
+    const ids=chat.messages.filter(m=>m.recipient_id===state.profile.id && !m.read_at).map(m=>m.id);
+    try {
+      for(let i=0;i<ids.length && visible();i+=500){
+        const batch=ids.slice(i,i+500);await rpc('campus_chat_mark_read',{p_ids:batch});
+        if(gen!==chat.generation || !state.profile) return;
+        // 只在服务器确认后更新本地已读状态；角标以重新读取的云端总数为准。
+        const marked=new Set(batch);chat.messages.forEach(m=>{if(marked.has(m.id))m.read_at='confirmed';});
+      }
+      if(ids.length && state.profile) await loadInbox(true);
+    } catch(error) {
+      if(visible()) chatStatus(`已读状态保存失败，未读提醒暂时保留。${chatFailure(error)}`,true);
+    }
   }
   function renderContacts() {
     $('contact-list').replaceChildren(...chat.contacts.map(peer => {
@@ -237,14 +297,14 @@
     } catch(error) { if (seq === chat.contactRequest) $('contact-status').textContent = chatFailure(error); }
     finally { if (seq === chat.contactRequest) $('contacts-more').disabled = false; }
   }
-  async function openMessages() { showPage(true); await loadContacts(true); await loadMessages(false); }
+  async function openMessages() { showPage(true); await showSidebar(false); await loadMessages(false); }
   async function selectPeer(peer) {
     if (chat.peer) chat.drafts.set(chat.peer.id, $('chat-input').value);
     chat.generation++; chat.peer = peer; chat.messages = []; chat.loading = false; chat.sending = false; chat.hasOlder = false;
     $('chat-title').textContent = peer.display_name; $('chat-peer').textContent = `${roleLabels[peer.role] || '用户'} · ${peer.id.slice(-8)} · 一对一私聊`;
     $('chat-input').value = chat.drafts.get(peer.id) || ''; $('chat-input').disabled = false;
     $('chat-send').disabled = false; $('chat-refresh').disabled = false;
-    renderContacts(); renderMessages(); await loadMessages(false); $('chat-input').focus();
+    renderContacts(); renderInbox(); renderMessages(); await loadMessages(false); $('chat-input').focus();
   }
   function renderMessages(older = false) {
     const scroll = $('message-scroll'); const height = scroll.scrollHeight; const top = scroll.scrollTop;
@@ -270,7 +330,7 @@
   }
   async function loadMessages(older = false) {
     if (!state.profile || !chat.peer || chat.loading || !chat.active || document.hidden) return;
-    const gen = chat.generation, peer = chat.peer.id;
+    const gen = chat.generation, peer = chat.peer.id, view=inbox.viewGeneration;
     const valid = () => gen === chat.generation && chat.peer?.id === peer && Boolean(state.profile);
     chat.loading = true; $('chat-older').disabled = true; $('chat-refresh').disabled = true;
     let cursor = older ? chat.messages[0] : null;
@@ -290,6 +350,7 @@
       if (!known.size || older) chat.hasOlder = rows.length === 50;
       mergeMessages(collected); renderMessages(older);
       chatStatus(chat.messages.length ? '消息已同步 · 每 5 秒更新' : '还没有消息，发送第一句问候吧。');
+      await markLoadedRead(gen,view,peer);
     } catch(error) { if(valid()) chatStatus(chatFailure(error),true); }
     finally { if(valid()) {chat.loading=false; $('chat-older').disabled=false; $('chat-refresh').disabled=false;} }
   }
@@ -311,6 +372,7 @@
       if($('chat-input').value===raw) $('chat-input').value='';
       $('message-scroll').scrollTop=$('message-scroll').scrollHeight;
       chatStatus('已保存到云端（不代表对方已读）');
+      await loadInbox(true);
     } catch(error) { if(gen===chat.generation) chatStatus(`${chatFailure(error)} 输入已保留，可点击发送重试。`,true); }
     finally { if(gen===chat.generation) {chat.sending=false; $('chat-send').disabled=false;} }
   }
@@ -389,6 +451,9 @@
   $('refresh').addEventListener('click',() => sync().catch(error => notice(error.message,true)));
   $('nav-messages').addEventListener('click',openMessages);
   $('nav-tasks').addEventListener('click',() => showPage(false));
+  $('tab-inbox').addEventListener('click',()=>showSidebar(false));
+  $('tab-contacts').addEventListener('click',()=>showSidebar(true));
+  $('inbox-refresh').addEventListener('click',()=>loadInbox(true));
   $('contact-role').addEventListener('change',() => loadContacts(true));
   $('contact-search-form').addEventListener('submit',event => {event.preventDefault();return loadContacts(true);});
   $('contacts-more').addEventListener('click',() => loadContacts(false));
@@ -401,7 +466,7 @@
   window.addEventListener('online',() => sync().catch(error => notice(error.message,true)));
   document.addEventListener('visibilitychange',() => {
     scheduleChat();
-    if (!document.hidden) {sync().catch(error => notice(error.message,true));loadMessages(false);}
+    if (!document.hidden) {sync().catch(error => notice(error.message,true));loadMessages(false);loadInbox();}
   });
   window.addEventListener('storage',event => {
     if (event.key === sessionKey) location.reload();

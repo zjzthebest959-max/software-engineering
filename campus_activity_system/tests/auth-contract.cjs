@@ -11,6 +11,7 @@ class Element {
   append(...nodes){this.children.push(...nodes);}
   replaceChildren(...nodes){this.children=nodes;}
   addEventListener(type,fn){this.events[type]=fn;}
+  setAttribute(){}
   focus(){}
   showModal(){this.open=true;}
   close(){this.open=false;}
@@ -32,6 +33,7 @@ async function boot(role, configured=true, authConfirmed=true){
     const name=url.split('/').pop(); requests.push({name,body:options.body ? JSON.parse(options.body) : null,auth:options.headers.Authorization});
     let data;
     if(name==='settings') data={mailer_autoconfirm:authConfirmed};
+    else if(name==='campus_chat_inbox') data={conversations:[],total_unread:0};
     else if(name==='signup'||name==='token?grant_type=password') data={...session,expires_in:3600};
     else if(name==='campus_me') data={id:role,role,display_name:role};
     else if(name==='campus_list_tasks') data=tasks;
@@ -47,7 +49,7 @@ async function boot(role, configured=true, authConfirmed=true){
     window:{addEventListener(){}},location:{reload(){}},fetch:request,AbortSignal,
     Option:function(text,value){const n=new Element();n.textContent=text;n.value=value;return n;},
     FormData:function(){return Object.entries(fields).map(([k,v])=>[k,v.value]);},
-    setInterval:fn=>{timer=fn;},confirm:()=>true,console,Date,Math,Set
+    setInterval:fn=>{timer=fn;},clearInterval(){},confirm:()=>true,console,Date,Math,Set
   });
   await new Promise(resolve=>setImmediate(resolve));
   return {nodes,fields,cards:()=>nodes['task-list'].children,timer};

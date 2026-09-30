@@ -19,14 +19,14 @@ class Element {
 }
 const peers=[{id:'teacher-11111111',display_name:'王老师',role:'teacher'},{id:'teacher-22222222',display_name:'王老师',role:'teacher'},{id:'admin-11111111',display_name:'管理员',role:'admin'}];
 const text=n=>[n.textContent||'',...n.children.map(text)].join(' ');
-async function boot(role='student'){
+async function boot(role='student', initialMessages=[]){
   const nodes=Object.fromEntries([...html.matchAll(/id="([^"]+)"/g)].map(m=>[m[1],new Element()]));
   const fields=Object.fromEntries(['display_name','username','password','role','title','course','category','priority','deadline'].map(k=>[k,new Element()]));
   for(const id of ['auth-form','task-form']) nodes[id].elements={namedItem:k=>fields[k]};
   nodes['view-filter'].value='all';
   const session={access_token:role,refresh_token:'refresh',expires_at:Math.floor(Date.now()/1000)+3600};
   const storage=new Map([['campus.cloud.session:https://example.supabase.co',JSON.stringify(session)]]);
-  const requests=[],timers=new Map(),messages=[];
+  const requests=[],timers=new Map(),messages=[...initialMessages];
   const hooks={}; const docEvents={}; let nextTimer=0;
   const document={hidden:false,getElementById:id=>nodes[id],createElement:()=>new Element(),
     querySelector:q=>({content:q.includes('supabase-url')?'https://example.supabase.co':'key'}),addEventListener:(k,f)=>docEvents[k]=f};
@@ -37,6 +37,14 @@ async function boot(role='student'){
     else if(name==='campus_me') data={id:role,role,display_name:'当前用户'};
     else if(name==='campus_list_tasks') data=[{id:'task',teacher_id:role,teacher_name:'老师',course:'软件工程',category:'作业',title:'设计',deadline:'2099-01-01',priority:'high',status:'published',enrollment_count:0,enrolled:false}];
     else if(name==='campus_chat_contacts') data=peers.filter(p=>!body.p_role||p.role===body.p_role);
+    else if(name==='campus_chat_inbox') {
+      const conversations=peers.map(p=>{
+        const rows=messages.filter(m=>(m.sender_id===role&&m.recipient_id===p.id)||(m.sender_id===p.id&&m.recipient_id===role)).sort((a,b)=>b.created_at.localeCompare(a.created_at));
+        return rows.length?{peer_id:p.id,display_name:p.display_name,role:p.role,last_body:rows[0].body,last_at:rows[0].created_at,last_sender_id:rows[0].sender_id,unread_count:rows.filter(m=>m.recipient_id===role&&!m.read_at).length}:null;
+      }).filter(Boolean).sort((a,b)=>b.last_at.localeCompare(a.last_at));
+      data={conversations,total_unread:conversations.reduce((n,c)=>n+c.unread_count,0)};
+    }
+    else if(name==='campus_chat_mark_read') {messages.forEach(m=>{if(m.recipient_id===role&&body.p_ids.includes(m.id))m.read_at='2026-10-01T00:00:00Z';});data=null;}
     else if(name==='campus_chat_messages') data=messages.filter(m=>m.recipient_id===body.p_peer||m.sender_id===body.p_peer);
     else if(name==='campus_chat_send') {data=messages.find(m=>m.client_message_id===body.p_client_id); if(!data){data={id:randomUUID(),sender_id:role,recipient_id:body.p_peer,body:body.p_body,created_at:new Date().toISOString(),client_message_id:body.p_client_id};messages.push(data);}}
     else if(name.startsWith('logout')) data=null;
@@ -50,7 +58,7 @@ async function boot(role='student'){
     setInterval:(fn,ms)=>{const id=++nextTimer;timers.set(id,{fn,ms});return id;},clearInterval:id=>timers.delete(id),console,confirm:()=>true,location:{reload(){}}});
   await flush();return {nodes,requests,timers,messages,hooks,document,docEvents};
 }
-async function open(app){assert.ok(app.nodes['nav-messages'],'需要消息入口');await app.nodes['nav-messages'].fire('click');await flush();}
+async function open(app){assert.ok(app.nodes['nav-messages'],'需要消息入口');await app.nodes['nav-messages'].fire('click');await app.nodes['tab-contacts']?.fire('click');await flush();}
 async function select(app,i=0){await app.nodes['contact-list'].children[i].fire('click');await flush();}
 async function run(){
   const a=await boot(); await open(a);
@@ -95,7 +103,7 @@ async function run(){
   assert.equal([...b.timers.values()].filter(t=>t.ms===5000).length,0);
   b.document.hidden=false;await b.docEvents.visibilitychange();await flush();
   assert.equal([...b.timers.values()].filter(t=>t.ms===5000).length,1);
-  await b.nodes['nav-tasks'].fire('click');assert.equal([...b.timers.values()].filter(t=>t.ms===5000).length,0);
+  await b.nodes['nav-tasks'].fire('click');assert.equal([...b.timers.values()].filter(t=>t.ms===5000).length,1,'任务页也应检查收件箱');
   await b.nodes.logout.fire('click');assert.equal(b.nodes['message-list'].children.length,0);
   console.log('PASS 切换联系人丢弃旧响应、隐藏/退出停止聊天轮询并清空消息');
 
@@ -132,4 +140,5 @@ async function run(){
   assert.equal(d.nodes['message-list'].children.length,52,'网络失败保留已有消息');
   console.log('PASS 失败筛选不混入旧联系人、超过一页的新消息追页补齐、未升级数据库明确提示');
 }
-run().catch(e=>{console.error(e);process.exitCode=1;});
+module.exports={boot,flush,peers,text};
+if(require.main===module) run().catch(e=>{console.error(e);process.exitCode=1;});

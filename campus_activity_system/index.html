@@ -23,7 +23,7 @@
     </form>
   </section>
   <section id="workspace-panel" hidden>
-    <nav class="page-nav" aria-label="系统功能"><button id="nav-tasks" class="primary" aria-pressed="true">课程任务</button><button id="nav-messages" class="quiet" aria-pressed="false">消息</button></nav>
+    <nav class="page-nav" aria-label="系统功能"><button id="nav-tasks" class="primary" aria-pressed="true">课程任务</button><button id="nav-messages" class="quiet" aria-pressed="false">消息 <span id="nav-unread" class="unread-badge" hidden></span></button><span id="inbox-health" class="hint" role="status"></span></nav>
     <div id="tasks-panel">
     <section class="stats" aria-label="任务概览"><div><span>可见任务</span><strong id="total">0</strong></div><div><span>可报名</span><strong id="available">0</strong></div><div><span id="personal-label">我的报名</span><strong id="personal">0</strong></div></section>
     <section class="board"><div class="toolbar"><div><h2 id="list-heading">课程任务</h2><p id="sync-status">等待同步</p></div><div class="filters"><label>课程<select id="course-filter"><option value="">全部课程</option></select></label><label>查看<select id="view-filter"></select></label><button id="refresh" class="quiet">刷新</button><button id="add-task" class="primary" hidden>＋ 发布任务</button></div></div>
@@ -31,7 +31,15 @@
     </section>
     </div>
     <section id="chat-panel" class="board chat-panel" aria-label="一对一私聊" hidden>
-      <aside class="contacts-pane" aria-labelledby="contacts-title">
+      <aside class="contacts-pane" aria-label="会话和联系人">
+        <div class="inbox-tabs"><button id="tab-inbox" class="primary" aria-pressed="true">收件箱</button><button id="tab-contacts" class="quiet" aria-pressed="false">联系人</button></div>
+        <section id="inbox-pane" aria-labelledby="inbox-title">
+          <div class="inbox-heading"><h2 id="inbox-title">最近会话</h2><button id="inbox-refresh" class="quiet" aria-label="刷新收件箱">刷新</button></div>
+          <p id="inbox-status" class="hint" role="status">登录后自动检查新消息。</p>
+          <div id="inbox-list" class="inbox-list"></div>
+          <p id="inbox-empty" class="hint" hidden>还没有会话。到“联系人”选择一个人开始聊天，收到消息也会自动出现在这里。</p>
+        </section>
+        <section id="contacts-directory" hidden>
         <h2 id="contacts-title">联系人</h2><p class="hint">选择一个人，开始私聊。</p>
         <form id="contact-search-form" class="contact-search">
           <label>身份<select id="contact-role"><option value="">全部身份</option><option value="student">学生</option><option value="teacher">教师</option><option value="admin">系统管理员</option></select></label>
@@ -41,6 +49,7 @@
         <p id="contact-status" class="hint" role="status"></p>
         <div id="contact-list" class="contact-list"></div>
         <button id="contacts-more" class="quiet" hidden>加载更多联系人</button>
+        </section>
       </aside>
       <div class="conversation-pane">
         <header class="conversation-heading"><div><h2 id="chat-title">选择联系人</h2><p id="chat-peer" class="hint">与学生、教师或系统管理员一对一交流</p></div><button id="chat-refresh" class="quiet" disabled>刷新消息</button></header>

@@ -23,3 +23,17 @@ textarea{font:inherit;resize:vertical;border:1px solid #dbe1eb;border-radius:9px
 textarea:focus-visible{outline:3px solid #a9bbfb;outline-offset:2px}textarea:disabled{background:#f5f6f9;cursor:not-allowed}
 .composer-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:9px}.composer-actions .hint{font-size:12px}
 @media(max-width:750px){.chat-panel{grid-template-columns:1fr;min-height:0}.contacts-pane{border-right:0;border-bottom:1px solid var(--line);padding:18px}.contact-search{grid-template-columns:1fr 1fr;align-items:end}.contact-search button{grid-column:1/-1}.contact-list{max-height:160px}.conversation-pane{max-height:none}.message-scroll{height:350px;flex:auto;min-height:200px}.conversation-heading{padding:18px}.conversation-heading h2{font-size:18px}#chat-status{padding-inline:18px}.composer{padding:18px}.message{max-width:92%}.composer-actions{align-items:flex-end}.composer-actions .hint{max-width:65%}}
+.page-nav{align-items:center;flex-wrap:wrap}.page-nav>button{display:inline-flex;align-items:center;gap:7px}
+.unread-badge{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;border-radius:12px;background:#df3c52;color:#fff;font-size:11px;line-height:1;font-weight:700;flex-shrink:0}
+.inbox-tabs{display:flex;gap:7px;margin-bottom:22px}.inbox-tabs button{flex:1;padding:10px 8px}
+.inbox-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}.inbox-heading h2{font-size:19px}.inbox-heading button{font-size:12px;padding:7px 10px}
+.inbox-list{display:grid;gap:6px;max-height:490px;overflow-y:auto;margin-top:12px}
+.inbox-item{display:grid;gap:6px;background:transparent;text-align:left;border:1px solid transparent;border-radius:10px;padding:12px 10px;min-width:0;width:100%}
+.inbox-item:hover{background:#eff3fa}.inbox-item.selected{background:#edf2ff;border-color:#c6d3ff}
+.inbox-item-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0}
+.inbox-item-heading strong{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.inbox-time{font-size:10px;color:var(--muted);font-weight:400;flex-shrink:0;max-width:110px;text-align:right}
+.inbox-role{font-size:11px;font-weight:400;color:var(--muted)}
+.inbox-preview{display:flex;gap:8px;align-items:center;min-width:0}.inbox-summary{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;font-size:13px;font-weight:400;color:#66738a}
+#inbox-health{font-size:12px;color:#ad3546}#inbox-status{font-size:12px;overflow-wrap:anywhere}
+@media(max-width:750px){.inbox-list{max-height:220px}.inbox-tabs{margin-bottom:15px}.inbox-item{padding:11px}.inbox-time{max-width:none}}
